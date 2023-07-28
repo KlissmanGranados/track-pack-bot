@@ -1,11 +1,9 @@
 version: "3"
 services:
 
-  tracking_mrw:
-    build: .
-
   tracking_mongo:
     image: mongo
+    container_name: tracking_mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: tracking
       MONGO_INITDB_ROOT_PASSWORD: tracking
@@ -13,5 +11,9 @@ services:
       - tracking_mongo:/data/db
     ports:
       - "27017:27017"
+
+  tracking_mrw:
+    build: .
+
 volumes:
   tracking_mongo:

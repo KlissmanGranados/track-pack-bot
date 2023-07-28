@@ -8,6 +8,6 @@ ENV LC_ALL es_ES.UTF-8
 
 WORKDIR /home/kg/app
 COPY ./ .
-RUN mvn clean install
+RUN mvn clean -DskipTests install
 
 CMD ["java", "-jar", "./target/tracking_telegram-0.0.1-SNAPSHOT.jar"]

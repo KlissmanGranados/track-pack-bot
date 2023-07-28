@@ -4,7 +4,6 @@ import com.google.zxing.*;
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
 import com.google.zxing.common.HybridBinarizer;
 import com.kg.mrw.tracking.telegram.dto.TrackingToResponseDto;
-import com.kg.mrw.tracking.telegram.dto.TrackingToSearchDto;
 import com.kg.mrw.tracking.telegram.exception.BotException;
 import com.kg.mrw.tracking.telegram.service.HttpWrapperService;
 import com.kg.mrw.tracking.telegram.service.ParserService;
@@ -28,7 +27,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-public class TrackingManager implements ParserService, TrackingService {
+public class TrackingManager implements TrackingService {
 
     private static final Logger logger = LoggerFactory.getLogger(TrackingManager.class);
     private static final String PATTERN_AUTHORIZATION = "(?m)^[^/]*'Authorization':\\s*'([^']+)'";
@@ -44,14 +43,10 @@ public class TrackingManager implements ParserService, TrackingService {
     }
 
     @Override
-    public TrackingToResponseDto getTrackingResponse(TrackingToSearchDto trackingToSearchDto) {
+    public TrackingToResponseDto getTrackingResponse(String trackingId ) {
 
-        if(trackingToSearchDto == null)
+        if(trackingId == null)
             throw new BotException("Empty data!");
-
-        String trackingId = trackingToSearchDto.isQrCode()?
-                getTrackingIdFromQr(trackingToSearchDto.getQrCode()):
-                trackingToSearchDto.getTrackingCode();
 
         if(inValidTrackingId(trackingId)) {
             throw new BotException("Invalid tracking code");
@@ -66,7 +61,8 @@ public class TrackingManager implements ParserService, TrackingService {
         return parserService.parse( trackingToResponseDto );
     }
 
-    private String getTrackingIdFromQr(InputStream inputStream) {
+    @Override
+    public String getTrackingIdFromQr(InputStream inputStream) {
         try {
             return readQRCode(inputStream).split(";")[0];
         } catch (NotFoundException | IOException e) {
@@ -169,6 +165,7 @@ public class TrackingManager implements ParserService, TrackingService {
         trackingToResponseDto.setAddress(address);
         trackingToResponseDto.setTypeOfShipment(typeOfShipment);
         trackingToResponseDto.setStatus(status);
+        trackingToResponseDto.setHasArrived(hasArrived);
 
         return trackingToResponseDto;
     }

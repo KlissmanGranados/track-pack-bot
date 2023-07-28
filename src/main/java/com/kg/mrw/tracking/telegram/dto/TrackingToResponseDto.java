@@ -11,6 +11,15 @@ public class TrackingToResponseDto {
     private String status;
     private String response;
     private String provider;
+    private boolean hasArrived = false;
+
+    public boolean isHasArrived() {
+        return hasArrived;
+    }
+
+    public void setHasArrived(boolean hasArrived) {
+        this.hasArrived = hasArrived;
+    }
 
     public String getProvider() {
         return provider;

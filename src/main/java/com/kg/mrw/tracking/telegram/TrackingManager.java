@@ -14,6 +14,8 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -84,21 +86,31 @@ public class TrackingManager {
                 .append("The delivery address is ").append(direccion).append(".\n")
                 .append("The type of shipment is ").append(tipoEnvio).append(".\n\n");
 
-        JSONArray tracking = json.getJSONArray("tracking");
+        Object tracking = json.get("tracking");
+        summary.append("Tracking information \uD83D\uDE9A: \n\n");
 
-        summary.append("Tracking information:\n");
         boolean hasArrived = false;
 
-        for (int i = 0; i < tracking.length(); i++) {
+        List<JSONObject> trackingEntries = new ArrayList<>();
 
-            JSONObject trackingEntry = tracking.getJSONObject(i);
+        if (tracking instanceof JSONArray trackingArray) {
+            for (int i = 0; i < trackingArray.length(); i++) {
+                trackingEntries.add(trackingArray.getJSONObject(i));
+            }
+        } else if (tracking instanceof JSONObject trackingObject) {
+            for (String key : trackingObject.keySet()) {
+                trackingEntries.add(trackingObject.getJSONObject(key));
+            }
+        }
+
+        for (JSONObject trackingEntry : trackingEntries) {
             String fecha = trackingEntry.getString("fecha");
             String estatus = trackingEntry.getString("estatus");
             summary.append("- On ").append(fecha).append(", the package status was updated to ").append(estatus);
             if (trackingEntry.has("agencia")) {
                 String agencia = trackingEntry.getString("agencia");
                 summary.append(" at ").append(agencia);
-                if ("Disponible en Agencia".equals(estatus) && agencia != null && agencia.equals(agenciaDestino)) {
+                if ("Disponible en Agencia".equals(estatus)) {
                     hasArrived = true;
                 }
             }
@@ -106,9 +118,9 @@ public class TrackingManager {
         }
 
         if (hasArrived) {
-            summary.append("\nThe package has arrived at its destination.");
+            summary.append("\nThe package has arrived at its destination. \uD83D\uDE33");
         } else {
-            summary.append("\nThe package has not yet arrived at its destination.");
+            summary.append("\nThe package has not yet arrived at its destination. \uD83D\uDE12");
         }
 
         return summary.toString();

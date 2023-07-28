@@ -31,9 +31,10 @@ import java.util.regex.Pattern;
 public class TrackingManager implements ParserService, TrackingService {
 
     private static final Logger logger = LoggerFactory.getLogger(TrackingManager.class);
-    public static final String PATTERN_AUTHORIZATION = "(?m)^[^/]*'Authorization':\\s*'([^']+)'";
-    public static final String TRACKING_TOKEN = "https://phoenixos.mrwve.com/js/tracking-externo.js";
-    public static final String TRACKING_FETCH = "https://phoenixos.mrwve.com/api/tracking-externo/v2";
+    private static final String PATTERN_AUTHORIZATION = "(?m)^[^/]*'Authorization':\\s*'([^']+)'";
+    private static final String TRACKING_TOKEN = "https://phoenixos.mrwve.com/js/tracking-externo.js";
+    private static final String TRACKING_FETCH = "https://phoenixos.mrwve.com/api/tracking-externo/v2";
+    private static final String PROVIDER_NAME = "MRW";
     private final HttpWrapperService httpWrapperService;
     private final ParserService parserService;
 
@@ -61,6 +62,7 @@ public class TrackingManager implements ParserService, TrackingService {
         trackingToResponseDto.setResponse(
                 getTracking(trackingToResponseDto.getTrackingCode())
         );
+        trackingToResponseDto.setProvider(PROVIDER_NAME);
         return parserService.parse( trackingToResponseDto );
     }
 

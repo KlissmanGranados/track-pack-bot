@@ -1,9 +1,15 @@
-package com.kg.mrw.tracking.telegram;
+package com.kg.mrw.tracking.telegram.logic;
 
+import com.kg.mrw.tracking.telegram.dto.TrackingToResponseDto;
+import com.kg.mrw.tracking.telegram.dto.TrackingToSearchDto;
+import com.kg.mrw.tracking.telegram.exception.BotException;
+import com.kg.mrw.tracking.telegram.service.TelegramService;
+import com.kg.mrw.tracking.telegram.service.TrackingService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
+import org.telegram.telegrambots.meta.api.methods.ParseMode;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.*;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
@@ -15,13 +21,13 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 
 @Service
-public class TelegramManager extends TelegramLongPollingBot {
+public class TelegramManager extends TelegramLongPollingBot implements TelegramService {
 
     @Value("${mrw.tracking.bot.username}")
     private String userName;
     @Value("${mrw.tracking.bot.token}")
     private String token;
-    private final TrackingManager trackingManager;
+    private final TrackingService trackingManager;
 
     public TelegramManager(TrackingManager trackingManager) {
         this.trackingManager = trackingManager;
@@ -48,19 +54,17 @@ public class TelegramManager extends TelegramLongPollingBot {
         Integer messageId = message.getMessageId();
         Long chatId = chat.getId();
 
-
         if("/start".equals(command)){
             replyToMessage(chatId, messageId, "If you send me an image containing a QR code from MRW, I can scan the code and provide you with information about your package. Alternatively, if you don’t have a QR code, you can simply send me a text message with the tracking number of your package, and I’ll be able to provide you with the information you need.");
             return;
         }
 
-        String reply = message.hasDocument()  || message.hasPhoto() ?
-                fromQr(message) : trackingManager.getTrackingResponse(message.getText());
-
-        replyToMessage(chatId, messageId, reply);
+        TrackingToResponseDto reply = message.hasDocument()  || message.hasPhoto() ?
+                fromQr(message) : trackingManager.getTrackingResponse(new TrackingToSearchDto(message.getText()));
+        replyToMessage(chatId, messageId, reply.details());
     }
 
-    private String fromQr(Message message) {
+    private TrackingToResponseDto fromQr(Message message) {
 
         String fileId = Optional.ofNullable(message.getDocument())
                 .map(Document::getFileId)
@@ -72,22 +76,21 @@ public class TelegramManager extends TelegramLongPollingBot {
         GetFile getFile = new GetFile(fileId);
 
         try (InputStream inputStream = downloadFileAsStream(execute(getFile).getFilePath())) {
-            return  trackingManager.getTrackingResponse(inputStream);
+            return  trackingManager.getTrackingResponse(new TrackingToSearchDto(inputStream));
         } catch (TelegramApiException | IOException e) {
-            e.printStackTrace();
+            throw new BotException(e.getMessage());
         }
-
-        return "No se ha podido procesar el QR";
     }
 
     private void sendMessage(Long chatId, String text) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(text);
+        message.setParseMode(ParseMode.MARKDOWNV2);
         try {
             execute(message);
         } catch (TelegramApiException e) {
-            e.printStackTrace();
+            throw new BotException(e.getMessage());
         }
     }
 
@@ -96,13 +99,12 @@ public class TelegramManager extends TelegramLongPollingBot {
         message.setChatId(String.valueOf(chatId));
         message.setReplyToMessageId(messageId);
         message.setText(text);
+        message.setParseMode(ParseMode.HTML);
         try {
             execute(message);
         } catch (TelegramApiException e) {
-            e.printStackTrace();
+            throw new BotException(e.getMessage());
         }
     }
-
-
 
 }

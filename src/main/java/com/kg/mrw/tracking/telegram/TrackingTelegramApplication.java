@@ -1,5 +1,6 @@
 package com.kg.mrw.tracking.telegram;
 
+import com.kg.mrw.tracking.telegram.logic.TelegramManager;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;

@@ -1,5 +1,6 @@
-package com.kg.mrw.tracking.telegram;
+package com.kg.mrw.tracking.telegram.logic;
 
+import com.kg.mrw.tracking.telegram.service.HttpWrapperService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Scope;
@@ -16,10 +17,10 @@ import java.util.Optional;
 
 @Service
 @Scope("prototype")
-public class HttpWrapper {
+public class HttpWrapperManager implements HttpWrapperService {
 
     private final HttpClient client;
-    private static final Logger logger = LoggerFactory.getLogger(HttpWrapper.class);
+    private static final Logger logger = LoggerFactory.getLogger(HttpWrapperManager.class);
     private static final Map<String, String> headersMap = new HashMap<>() {{
         put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0");
         put("Accept", "*/*");
@@ -31,10 +32,11 @@ public class HttpWrapper {
         put("Cache-Control", "no-cache");
     }};
 
-    public HttpWrapper(){
+    public HttpWrapperManager(){
         this.client = HttpClient.newBuilder().build();
     }
 
+    @Override
     public Optional< HttpResponse<String> > fetch(HttpRequest.Builder request) {
 
         Map<String, List<String>> headers = request.build().headers().map();

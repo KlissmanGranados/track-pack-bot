@@ -1,8 +1,16 @@
 name: ssh command
-on: push
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+    types: [closed]
 jobs:
   test:
     runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
     steps:
       - id: ssh
         uses: invi5H/ssh-action@v1

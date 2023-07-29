@@ -159,7 +159,7 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
                 return packageDocument;
             };
 
-            packageDao.findByTrackingCode(trackingId)
+            packageDao.findByTrackingCodeAndChatId(trackingId, chatId)
                     .ifPresentOrElse(
                             pack -> {
 

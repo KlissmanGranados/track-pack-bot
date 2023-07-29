@@ -16,7 +16,6 @@ public class Package  {
     private String client;
     private String address;
     private String typeOfShipment;
-    @Indexed(unique = true)
     private String trackingCode;
     @Indexed
     private Long chatId;

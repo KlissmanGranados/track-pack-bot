@@ -27,6 +27,10 @@ public class User {
         this.messageTracking = messageTracking;
     }
 
+    public void addMessageTracking(MessageTracking message) {
+        this.messageTracking.add(message);
+    }
+
     public ObjectId getId() {
         return id;
     }

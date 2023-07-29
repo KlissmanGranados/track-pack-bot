@@ -2,6 +2,7 @@ package com.kg.mrw.tracking.telegram.logic;
 
 import com.kg.mrw.tracking.telegram.daos.PackageDao;
 import com.kg.mrw.tracking.telegram.daos.UserDao;
+import com.kg.mrw.tracking.telegram.documents.Config;
 import com.kg.mrw.tracking.telegram.documents.Package;
 import com.kg.mrw.tracking.telegram.documents.User;
 import com.kg.mrw.tracking.telegram.dto.TrackingToResponseDto;
@@ -24,24 +25,29 @@ import java.io.InputStream;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.function.Function;
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
 
 @Service
 public class TelegramManager extends TelegramLongPollingBot implements TelegramService {
 
+    public static final String START = "/start";
+    public static final String RECORDS = "/records";
     private static final Logger logger = LoggerFactory.getLogger(TelegramManager.class);
+    private final TrackingService trackingManager;
+    private final UserDao userDao;
+    private final PackageDao packageDao;
+    private final Config config;
     @Value("${mrw.tracking.bot.username}")
     private String userName;
     @Value("${mrw.tracking.bot.token}")
     private String token;
-    private final TrackingService trackingManager;
-    private final UserDao userDao;
-    private final PackageDao packageDao;
 
-    public TelegramManager(TrackingManager trackingManager, UserDao userDao, PackageDao packageDao) {
+    public TelegramManager(TrackingManager trackingManager, UserDao userDao, PackageDao packageDao, Config config) {
         this.trackingManager = trackingManager;
         this.userDao = userDao;
         this.packageDao = packageDao;
+        this.config = config;
     }
 
     @Override
@@ -64,127 +70,26 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
 
         String command = message.getText();
         Integer messageId = message.getMessageId();
+
         User.MessageTracking messageTracking = new User.MessageTracking();
-
-        if("/start".equals(command)){
-            messageTracking.setMessage(command);
-            userDao.findByUserName(userName)
-                    .orElseGet( () -> userDao.save( new User(userName, chatId, List.of(messageTracking)) ));
-            replyToMessage(chatId, messageId, "If you send me an image containing a QR code from MRW, I can scan the code and provide you with information about your package. Alternatively, if you don’t have a QR code, you can simply send me a text message with the tracking number of your package, and I’ll be able to provide you with the information you need.");
-            return;
-        }
-
-        Function<Package, String> getDetailsFromPackage = pack -> {
-            TrackingToResponseDto trackingToResponseDto = new TrackingToResponseDto();
-            trackingToResponseDto.setTrackingCode(pack.getTrackingCode());
-            trackingToResponseDto.setResponse(pack.getResponse());
-            trackingToResponseDto.setProvider(pack.getProvider());
-            return trackingManager.parse(trackingToResponseDto).details();
-        };
-
-        if("/records".equalsIgnoreCase(command)) {
-
-            messageTracking.setMessage("Showing the records of the last 15 days");
-
-            userDao.findByUserName(userName)
-                    .ifPresentOrElse(
-                            user -> {
-                                user.getMessageTracking().add(messageTracking);
-                                userDao.save(user);
-                            },
-                            () -> userDao.save( new User(userName, chatId, List.of(messageTracking)) ) );
-
-            Instant date = Instant.now().minus(15, ChronoUnit.DAYS);
-            List<Package> recentPackages = packageDao.findPackagesUpdatedAfter(date, chatId);
-
-            List<String> detailsByArrived = new ArrayList<>();
-            List<String> detailsByPending = new ArrayList<>();
-
-            recentPackages.forEach( pack -> {
-                if (pack.isHasArrived()) {
-                    detailsByArrived.add( getDetailsFromPackage.apply(pack) );
-                } else {
-
-                    TrackingToResponseDto reply = trackingManager.getTrackingResponse(pack.getTrackingCode());
-                    if(reply.isHasArrived()) {
-                        pack.setUpdatedAt(Instant.now());
-                        packageDao.save(pack);
-                        detailsByArrived.add( getDetailsFromPackage.apply(pack) );
-                    } else {
-                        detailsByPending.add(getDetailsFromPackage.apply(pack));
-                    }
-                }
-
-            });
-
-            StringBuilder details = new StringBuilder();
-
-            details.append("Showing the records of the last 15 days ... \n\n");
-
-            detailsByArrived.forEach(detail -> {
-                details.append(detail);
-                details.append("\n");
-            });
-
-            detailsByPending.forEach(detail -> {
-                details.append(detail);
-                details.append("\n");
-            });
-
-            replyToMessage(chatId, messageId, details.toString());
-
-            return;
-        }
+        Supplier<String> getMessageByCommand = () -> config.getMessageByCommands().getOrDefault(command,"")
+                .concat("\n\n");
 
         try {
 
-            boolean isByQr = message.hasDocument()  || message.hasPhoto();
-            String trackingId = isByQr? getTrackingIdFromQr(message) : message.getText();
-            messageTracking.setMessage("find package");
-            messageTracking.setTrackingId(trackingId);
-            messageTracking.setByQr(isByQr);
+            if (START.equals(command)) {
+                messageTracking.setMessage(command);
+                replyToMessage(chatId, messageId, getMessageByCommand.get());
+                return;
+            }
 
-            Function<TrackingToResponseDto, Package> packageMapFromTrackingResponse = reply -> {
-                Package packageDocument = new Package();
-                packageDocument.setProvider(reply.getProvider());
-                packageDocument.setAddress(reply.getAddress());
-                packageDocument.setClient(reply.getClient());
-                packageDocument.setDestination(reply.getDestination());
-                packageDocument.setResponse(reply.getResponse());
-                packageDocument.setOrigin(reply.getOrigin());
-                packageDocument.setTrackingCode(trackingId);
-                packageDocument.setHasArrived(reply.isHasArrived());
-                packageDocument.setTypeOfShipment(reply.getTypeOfShipment());
-                packageDocument.setChatId(chatId);
-                return packageDocument;
-            };
+            if (RECORDS.equals(command)) {
+                messageTracking.setMessage(command);
+                lastRecords(chatId, messageId, getMessageByCommand);
+                return;
+            }
 
-            packageDao.findByTrackingCodeAndChatId(trackingId, chatId)
-                    .ifPresentOrElse(
-                            pack -> {
-
-                                messageTracking.setProvider(pack.getProvider());
-                                pack.setUpdatedAt(Instant.now());
-
-                                if(pack.isHasArrived()) {
-                                    replyToMessage(chatId, messageId, getDetailsFromPackage.apply(pack));
-                                    return;
-                                }
-
-                                TrackingToResponseDto reply = trackingManager.getTrackingResponse(trackingId);
-                                pack.setHasArrived( reply.isHasArrived() );
-                                messageTracking.setProvider(reply.getProvider());
-                                replyToMessage(chatId, messageId, reply.details());
-                            },
-
-                            () -> {
-                                TrackingToResponseDto reply = trackingManager.getTrackingResponse(trackingId);
-                                Package packageDocument = packageMapFromTrackingResponse.apply(reply);
-                                packageDocument.setUpdatedAt(Instant.now());
-                                packageDao.save(packageDocument);
-                                messageTracking.setProvider(reply.getProvider());
-                                replyToMessage(chatId, messageId, reply.details());
-                            } );
+            searchPackageHandler(message, chatId, messageId, messageTracking);
 
         } catch (Exception e) {
 
@@ -193,16 +98,104 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
             replyToMessage(chatId, messageId, "No se ha podido procesar la consulta \uD83D\uDE13");
 
         } finally {
-
-            userDao.findByUserName(userName)
-                    .ifPresentOrElse(
-                            user -> {
-                                user.getMessageTracking().add(messageTracking);
-                                userDao.save(user);
-                            },
-                            () -> userDao.save( new User(userName, chatId, List.of(messageTracking)) ) );
+            userTracking(userName, chatId, messageTracking);
         }
 
+    }
+
+    private String getDetailsFromPackage(Package pack) {
+        TrackingToResponseDto trackingToResponseDto = new TrackingToResponseDto();
+        trackingToResponseDto.setTrackingCode(pack.getTrackingCode());
+        trackingToResponseDto.setResponse(pack.getResponse());
+        trackingToResponseDto.setProvider(pack.getProvider());
+        return trackingManager.parse(trackingToResponseDto).details();
+    }
+
+    private Package packageMapFromTrackingResponse(TrackingToResponseDto reply, Long chatId) {
+        Package packageDocument = new Package();
+        packageDocument.setProvider(reply.getProvider());
+        packageDocument.setAddress(reply.getAddress());
+        packageDocument.setClient(reply.getClient());
+        packageDocument.setDestination(reply.getDestination());
+        packageDocument.setResponse(reply.getResponse());
+        packageDocument.setOrigin(reply.getOrigin());
+        packageDocument.setTrackingCode(reply.getTrackingCode());
+        packageDocument.setHasArrived(reply.isHasArrived());
+        packageDocument.setTypeOfShipment(reply.getTypeOfShipment());
+        packageDocument.setChatId(chatId);
+        return packageDocument;
+    }
+
+    private void userTracking(String userName, Long chatId, User.MessageTracking messageTracking) {
+        User user = userDao.findByUserName(userName)
+                .orElseGet(() -> new User(userName, chatId, new ArrayList<>()));
+        user.addMessageTracking(messageTracking);
+        userDao.save(user);
+    }
+
+    private void searchPackageHandler(Message message, Long chatId, Integer messageId, User.MessageTracking messageTracking) {
+
+        boolean isByQr = message.hasDocument() || message.hasPhoto();
+        String trackingId = isByQr ? getTrackingIdFromQr(message) : message.getText();
+        messageTracking.setMessage("find package");
+        messageTracking.setTrackingId(trackingId);
+        messageTracking.setByQr(isByQr);
+
+        Optional<Package> optionalPackage = packageDao.findByTrackingCodeAndChatId(trackingId, chatId);
+
+        if(optionalPackage.isEmpty()) {
+            TrackingToResponseDto reply = trackingManager.getTrackingResponse(trackingId);
+            Package packageDocument = packageMapFromTrackingResponse(reply, chatId);
+            packageDocument.setUpdatedAt(Instant.now());
+            packageDao.save(packageDocument);
+            messageTracking.setProvider(reply.getProvider());
+            replyToMessage(chatId, messageId, reply.details());
+            return;
+        }
+
+        Package pack = optionalPackage.get();
+        messageTracking.setProvider(pack.getProvider());
+        pack.setUpdatedAt(Instant.now());
+
+        if (pack.isHasArrived()) {
+            replyToMessage(chatId, messageId, getDetailsFromPackage(pack));
+            return;
+        }
+
+        TrackingToResponseDto reply = trackingManager.getTrackingResponse(trackingId);
+        pack.setHasArrived(reply.isHasArrived());
+        replyToMessage(chatId, messageId, reply.details());
+    }
+
+    private void lastRecords(Long chatId, Integer messageId, Supplier<String> getMessageByCommand) {
+
+        Instant date = Instant.now().minus(15, ChronoUnit.DAYS);
+        List<Package> recentPackages = packageDao.findPackagesUpdatedAfter(date, chatId);
+
+        StringBuilder firstDetail = new StringBuilder();
+        StringBuilder lastDetail = new StringBuilder();
+        BiConsumer<StringBuilder, Package> appendToBuilder = (builder, pack) -> builder
+                .append( getDetailsFromPackage(pack) ).append("\n");
+
+        firstDetail.append(getMessageByCommand.get());
+
+        for (Package pack : recentPackages) {
+            if (pack.isHasArrived()) {
+                appendToBuilder.accept(firstDetail, pack);
+            } else {
+                TrackingToResponseDto reply = trackingManager.getTrackingResponse(pack.getTrackingCode());
+                if (reply.isHasArrived()) {
+                    pack.setUpdatedAt(Instant.now());
+                    packageDao.save(pack);
+                    appendToBuilder.accept(firstDetail, pack);
+                } else {
+                    appendToBuilder.accept(lastDetail, pack);
+                }
+            }
+        }
+
+        firstDetail.append(lastDetail);
+        replyToMessage(chatId, messageId, firstDetail.toString());
     }
 
     private String getTrackingIdFromQr(Message message) {

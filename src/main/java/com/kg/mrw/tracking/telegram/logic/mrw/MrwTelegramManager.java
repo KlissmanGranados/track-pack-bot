@@ -1,4 +1,4 @@
-package com.kg.mrw.tracking.telegram.logic;
+package com.kg.mrw.tracking.telegram.logic.mrw;
 
 import com.kg.mrw.tracking.telegram.daos.PackageDao;
 import com.kg.mrw.tracking.telegram.daos.UserDao;
@@ -7,11 +7,10 @@ import com.kg.mrw.tracking.telegram.documents.Package;
 import com.kg.mrw.tracking.telegram.documents.User;
 import com.kg.mrw.tracking.telegram.dto.TrackingToResponseDto;
 import com.kg.mrw.tracking.telegram.exception.BotException;
-import com.kg.mrw.tracking.telegram.service.TelegramService;
 import com.kg.mrw.tracking.telegram.service.TrackingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
@@ -29,22 +28,21 @@ import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 @Service
-public class TelegramManager extends TelegramLongPollingBot implements TelegramService {
+public class MrwTelegramManager extends TelegramLongPollingBot {
 
     public static final String START = "/start";
     public static final String RECORDS = "/records";
-    private static final Logger logger = LoggerFactory.getLogger(TelegramManager.class);
-    private final TrackingService trackingManager;
+    private static final Logger logger = LoggerFactory.getLogger(MrwTelegramManager.class);
+    private final TrackingService mrwTrackingManager;
     private final UserDao userDao;
     private final PackageDao packageDao;
     private final Config config;
-    @Value("${mrw.tracking.bot.username}")
-    private String userName;
-    @Value("${mrw.tracking.bot.token}")
-    private String token;
+    private final String userName;
 
-    public TelegramManager(TrackingManager trackingManager, UserDao userDao, PackageDao packageDao, Config config) {
-        this.trackingManager = trackingManager;
+    public MrwTelegramManager(MrwTrackingManager mrwTrackingManager, UserDao userDao, PackageDao packageDao, Config config, Environment env) {
+        super(env.getProperty("mrw.tracking.bot.token"));
+        this.userName = env.getProperty("mrw.tracking.bot.username");
+        this.mrwTrackingManager = mrwTrackingManager;
         this.userDao = userDao;
         this.packageDao = packageDao;
         this.config = config;
@@ -53,11 +51,6 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
     @Override
     public String getBotUsername() {
         return userName;
-    }
-
-    @Override
-    public String getBotToken() {
-        return token;
     }
 
     @Override
@@ -72,8 +65,7 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
         Integer messageId = message.getMessageId();
 
         User.MessageTracking messageTracking = new User.MessageTracking();
-        Supplier<String> getMessageByCommand = () -> config.getMessageByCommands().getOrDefault(command,"")
-                .concat("\n\n");
+        Supplier<String> getMessageByCommand = () -> config.getMessageByCommands().get(command).concat("\n\n");
 
         try {
 
@@ -108,7 +100,7 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
         trackingToResponseDto.setTrackingCode(pack.getTrackingCode());
         trackingToResponseDto.setResponse(pack.getResponse());
         trackingToResponseDto.setProvider(pack.getProvider());
-        return trackingManager.parse(trackingToResponseDto).details();
+        return mrwTrackingManager.parse(trackingToResponseDto).details();
     }
 
     private Package packageMapFromTrackingResponse(TrackingToResponseDto reply, Long chatId) {
@@ -127,8 +119,7 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
     }
 
     private void userTracking(String userName, Long chatId, User.MessageTracking messageTracking) {
-        User user = userDao.findByUserName(userName)
-                .orElseGet(() -> new User(userName, chatId, new ArrayList<>()));
+        User user = userDao.findByUserName(userName).orElseGet(() -> new User(userName, chatId, new ArrayList<>()));
         user.addMessageTracking(messageTracking);
         userDao.save(user);
     }
@@ -144,7 +135,7 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
         Optional<Package> optionalPackage = packageDao.findByTrackingCodeAndChatId(trackingId, chatId);
 
         if(optionalPackage.isEmpty()) {
-            TrackingToResponseDto reply = trackingManager.getTrackingResponse(trackingId);
+            TrackingToResponseDto reply = mrwTrackingManager.getTrackingResponse(trackingId);
             Package packageDocument = packageMapFromTrackingResponse(reply, chatId);
             packageDocument.setUpdatedAt(Instant.now());
             packageDao.save(packageDocument);
@@ -162,7 +153,7 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
             return;
         }
 
-        TrackingToResponseDto reply = trackingManager.getTrackingResponse(trackingId);
+        TrackingToResponseDto reply = mrwTrackingManager.getTrackingResponse(trackingId);
         pack.setHasArrived(reply.isHasArrived());
         replyToMessage(chatId, messageId, reply.details());
     }
@@ -183,7 +174,7 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
             if (pack.isHasArrived()) {
                 appendToBuilder.accept(firstDetail, pack);
             } else {
-                TrackingToResponseDto reply = trackingManager.getTrackingResponse(pack.getTrackingCode());
+                TrackingToResponseDto reply = mrwTrackingManager.getTrackingResponse(pack.getTrackingCode());
                 if (reply.isHasArrived()) {
                     pack.setUpdatedAt(Instant.now());
                     packageDao.save(pack);
@@ -210,20 +201,8 @@ public class TelegramManager extends TelegramLongPollingBot implements TelegramS
         GetFile getFile = new GetFile(fileId);
 
         try (InputStream inputStream = downloadFileAsStream(execute(getFile).getFilePath())) {
-            return trackingManager.getTrackingIdFromQr(inputStream);
+            return mrwTrackingManager.getTrackingIdFromQr(inputStream);
         } catch (TelegramApiException | IOException e) {
-            throw new BotException(e.getMessage());
-        }
-    }
-
-    private void sendMessage(Long chatId, String text) {
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(text);
-        message.setParseMode(ParseMode.MARKDOWNV2);
-        try {
-            execute(message);
-        } catch (TelegramApiException e) {
             throw new BotException(e.getMessage());
         }
     }

@@ -1,21 +1,19 @@
-package com.kg.mrw.tracking.telegram.logic;
+package com.kg.mrw.tracking.telegram.logic.mrw;
 
-import com.google.zxing.*;
-import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
-import com.google.zxing.common.HybridBinarizer;
+import com.google.zxing.NotFoundException;
+import com.kg.mrw.tracking.telegram.daos.ProviderDao;
+import com.kg.mrw.tracking.telegram.documents.Provider;
 import com.kg.mrw.tracking.telegram.dto.TrackingToResponseDto;
 import com.kg.mrw.tracking.telegram.exception.BotException;
 import com.kg.mrw.tracking.telegram.service.HttpWrapperService;
 import com.kg.mrw.tracking.telegram.service.ParserService;
-import com.kg.mrw.tracking.telegram.service.TrackingService;
+import com.kg.mrw.tracking.telegram.support.TrackingServiceSupport;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -27,9 +25,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-public class TrackingManager implements TrackingService {
+public class MrwTrackingManager extends TrackingServiceSupport {
 
-    private static final Logger logger = LoggerFactory.getLogger(TrackingManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(MrwTrackingManager.class);
     private static final String PATTERN_AUTHORIZATION = "(?m)^[^/]*'Authorization':\\s*'([^']+)'";
     private static final String TRACKING_TOKEN = "https://phoenixos.mrwve.com/js/tracking-externo.js";
     private static final String TRACKING_FETCH = "https://phoenixos.mrwve.com/api/tracking-externo/v2";
@@ -37,9 +35,10 @@ public class TrackingManager implements TrackingService {
     private final HttpWrapperService httpWrapperService;
     private final ParserService parserService;
 
-    public TrackingManager(HttpWrapperService httpWrapperService) {
+    public MrwTrackingManager(HttpWrapperService httpWrapperService, ProviderDao providerDao) {
         this.httpWrapperService = httpWrapperService;
         this.parserService = this;
+        providerDao.findByName(PROVIDER_NAME).orElseGet( () -> providerDao.save( new Provider(PROVIDER_NAME)) );
     }
 
     @Override
@@ -75,37 +74,27 @@ public class TrackingManager implements TrackingService {
         return tracking == null || !tracking.matches("\\d+");
     }
 
-    private String readQRCode(InputStream inputStream) throws IOException, NotFoundException {
-        BufferedImage bufferedImage = ImageIO.read(inputStream);
-        LuminanceSource source = new BufferedImageLuminanceSource(bufferedImage);
-        BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
-        Result result = new MultiFormatReader().decode(bitmap);
-        return result.getText();
-    }
-
     private String getTracking(String tracking) {
 
-        String token = getToken();
-        HttpResponse<String> httpResponseTracking = httpWrapperService.fetch(
+        return httpWrapperService.fetch(
                 HttpRequest.newBuilder()
                         .uri(URI.create(TRACKING_FETCH))
                         .POST(HttpRequest.BodyPublishers.ofString(String.format("nro_tracking=%s", tracking)))
                         .setHeader("Accept", "application/json, text/javascript, */*; q=0.01")
                         .setHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                        .setHeader("Authorization", token)
+                        .setHeader("Authorization", getToken())
                         .setHeader("tryCount", "0")
                         .setHeader("retryLimit", "3")
                         .setHeader("X-Requested-With", "XMLHttpRequest")
-        ).orElseThrow(() -> new RuntimeException(""));
-        return httpResponseTracking.body();
-
+        )
+        .orElseThrow(() -> new BotException("tracking error")).body();
     }
 
     private String getToken() {
 
         HttpResponse<String> httpResponseToken = httpWrapperService
                 .fetch(HttpRequest.newBuilder().uri(URI.create(TRACKING_TOKEN)))
-                .orElseThrow(() -> new RuntimeException(""));
+                .orElseThrow(() -> new BotException("fetch token error"));
 
         Pattern pattern = Pattern.compile(PATTERN_AUTHORIZATION);
         Matcher matcher = pattern.matcher(httpResponseToken.body());
@@ -114,7 +103,7 @@ public class TrackingManager implements TrackingService {
             return matcher.group(1);
         }
 
-        throw new RuntimeException("");
+        throw new BotException("token error");
     }
 
     @Override

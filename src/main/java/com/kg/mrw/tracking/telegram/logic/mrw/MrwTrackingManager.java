@@ -94,7 +94,7 @@ public class MrwTrackingManager extends TrackingServiceSupport {
 
         HttpResponse<String> httpResponseToken = httpWrapperService
                 .fetch(HttpRequest.newBuilder().uri(URI.create(TRACKING_TOKEN)))
-                .orElseThrow(() -> new BotException(""));
+                .orElseThrow(() -> new BotException("fetch token error"));
 
         Pattern pattern = Pattern.compile(PATTERN_AUTHORIZATION);
         Matcher matcher = pattern.matcher(httpResponseToken.body());

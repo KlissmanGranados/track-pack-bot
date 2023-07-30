@@ -19,4 +19,4 @@ jobs:
           SSH_PORT: ${{ secrets.PORT }}
           SSH_USER: ${{ secrets.USERNAME }}
           SSH_KEY: ${{ secrets.KEY }}
-      - run: ssh ${{ steps.ssh.outputs.SERVER }} "cd ${{ secrets.DIRECTORY }} && docker compose down && docker image rm ${{ secrets.IMAGE }} && docker compose up -d"
+      - run: ssh ${{ steps.ssh.outputs.SERVER }} "cd ${{ secrets.DIRECTORY }} && git pull origin master && docker compose down && docker image rm ${{ secrets.IMAGE }} && docker compose up -d"

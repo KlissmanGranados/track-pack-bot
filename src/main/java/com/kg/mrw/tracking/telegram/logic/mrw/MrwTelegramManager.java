@@ -55,7 +55,7 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
         this.executorService = executorService;
     }
 
-    @Scheduled(cron = "0 30 12 * * *")
+    @Scheduled(cron = "0 30 12 * * *", zone =  "America/Caracas")
     public void checkPackage(){
 
         Map<Long, List<Package>> packs =  packageDao.findByHasNotifiedFalseOrNotExists()

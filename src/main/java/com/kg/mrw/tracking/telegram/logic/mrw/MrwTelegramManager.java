@@ -71,7 +71,7 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
 
                 for (Package pack : packages) {
 
-                    if( pack.getHasArrived()) {
+                    if( pack.isHasArrived()) {
                         appendToBuilder.accept(firstDetails, pack);
                     } else {
                         TrackingToResponseDto reply = mrwTrackingManager.getTrackingResponse(pack.getTrackingCode());
@@ -83,8 +83,8 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
                         }
                     }
 
-                    pack.setHasNotified(true);
-
+                    if(pack.isHasArrived())
+                        pack.setHasNotified(true);
                 }
 
                 firstDetails.append(lastDetails);

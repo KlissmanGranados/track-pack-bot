@@ -55,7 +55,7 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
         this.executorService = executorService;
     }
 
-    @Scheduled(cron = "0 30 12 * * *")
+    @Scheduled(cron = "0 30 12 * * *", zone =  "America/Caracas")
     public void checkPackage(){
 
         Map<Long, List<Package>> packs =  packageDao.findByHasNotifiedFalseOrNotExists()
@@ -83,13 +83,18 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
                         }
                     }
 
-                    if(pack.isHasArrived())
-                        pack.setHasNotified(true);
+                }
+
+                boolean isAllArrived = packages.stream()
+                        .allMatch(p -> p != null && p.isHasArrived());
+
+                if(isAllArrived) {
+                    packages.forEach( pack -> pack.setHasNotified(true) );
+                    packageDao.saveAll(packages);
                 }
 
                 firstDetails.append(lastDetails);
                 sendMessage(chatId, firstDetails.toString());
-                packageDao.saveAll(packages);
 
             });
 

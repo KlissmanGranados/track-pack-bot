@@ -11,6 +11,8 @@ import com.kg.mrw.tracking.telegram.service.TrackingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
@@ -26,6 +28,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 @Service
 public class MrwTelegramManager extends TelegramLongPollingBot {
@@ -38,14 +41,59 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
     private final PackageDao packageDao;
     private final Config config;
     private final String userName;
+    private final ThreadPoolTaskExecutor executorService;
+    private final BiConsumer<StringBuilder, Package> appendToBuilder = (builder, pack) -> builder
+            .append( getDetailsFromPackage(pack) ).append("\n");
 
-    public MrwTelegramManager(MrwTrackingManager mrwTrackingManager, UserDao userDao, PackageDao packageDao, Config config, Environment env) {
+    public MrwTelegramManager(MrwTrackingManager mrwTrackingManager, UserDao userDao, PackageDao packageDao, Config config, Environment env, ThreadPoolTaskExecutor executorService) {
         super(env.getProperty("mrw.tracking.bot.token"));
         this.userName = env.getProperty("mrw.tracking.bot.username");
         this.mrwTrackingManager = mrwTrackingManager;
         this.userDao = userDao;
         this.packageDao = packageDao;
         this.config = config;
+        this.executorService = executorService;
+    }
+
+    @Scheduled(cron = "0 30 12 * * *")
+    public void checkPackage(){
+
+        Map<Long, List<Package>> packs =  packageDao.findByHasNotifiedFalseOrNotExists()
+                .stream().collect(Collectors.groupingBy(Package::getChatId));
+
+        for (Long chatId : packs.keySet()) {
+
+            executorService.submit( () -> {
+
+                List<Package> packages = packs.get(chatId);
+                StringBuilder firstDetails = new StringBuilder();
+                StringBuilder lastDetails = new StringBuilder();
+
+                for (Package pack : packages) {
+
+                    if( pack.getHasArrived()) {
+                        appendToBuilder.accept(firstDetails, pack);
+                    } else {
+                        TrackingToResponseDto reply = mrwTrackingManager.getTrackingResponse(pack.getTrackingCode());
+                        if(reply.isHasArrived()) {
+                            pack.setHasArrived(true);
+                            appendToBuilder.accept(firstDetails, pack);
+                        } else {
+                            appendToBuilder.accept(lastDetails, pack);
+                        }
+                    }
+
+                    pack.setHasNotified(true);
+
+                }
+
+                firstDetails.append(lastDetails);
+                sendMessage(chatId, firstDetails.toString());
+                packageDao.saveAll(packages);
+
+            });
+
+        }
     }
 
     @Override
@@ -165,8 +213,6 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
 
         StringBuilder firstDetail = new StringBuilder();
         StringBuilder lastDetail = new StringBuilder();
-        BiConsumer<StringBuilder, Package> appendToBuilder = (builder, pack) -> builder
-                .append( getDetailsFromPackage(pack) ).append("\n");
 
         firstDetail.append(getMessageByCommand.get());
 
@@ -203,6 +249,18 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
         try (InputStream inputStream = downloadFileAsStream(execute(getFile).getFilePath())) {
             return mrwTrackingManager.getTrackingIdFromQr(inputStream);
         } catch (TelegramApiException | IOException e) {
+            throw new BotException(e.getMessage());
+        }
+    }
+
+    private void sendMessage(Long chatId, String text) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(text);
+        message.setParseMode(ParseMode.HTML);
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
             throw new BotException(e.getMessage());
         }
     }

@@ -24,6 +24,19 @@ public class Package  {
     private String response;
     private String provider;
     private Boolean hasArrived = false;
+    private Boolean hasNotified = false;
+
+    public Boolean getHasArrived() {
+        return hasArrived;
+    }
+
+    public Boolean getHasNotified() {
+        return hasNotified;
+    }
+
+    public void setHasNotified(Boolean hasNotified) {
+        this.hasNotified = hasNotified;
+    }
 
     public Instant getUpdatedAt() {
         return updatedAt;

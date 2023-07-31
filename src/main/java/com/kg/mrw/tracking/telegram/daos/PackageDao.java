@@ -13,4 +13,7 @@ public interface PackageDao extends CrudRepository<Package, ObjectId> {
     Optional<Package> findByTrackingCodeAndChatId(String trackingCode, Long chatId);
     @Query(value = "{ 'updatedAt' : { $gte: ?0 }, 'chatId': ?1 }", sort = "{ 'updatedAt' : -1 }")
     List<Package> findPackagesUpdatedAfter(Instant date, Long chatId);
+
+    @Query("{ $or: [ { hasNotified: false }, { hasNotified: { $exists: false } } ] }")
+    List<Package> findByHasNotifiedFalseOrNotExists();
 }

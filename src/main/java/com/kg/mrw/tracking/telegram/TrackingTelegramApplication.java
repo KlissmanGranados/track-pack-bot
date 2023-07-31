@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.LongPollingBot;
@@ -21,6 +22,7 @@ import java.util.List;
 
 @SpringBootApplication
 @EnableMongoRepositories
+@EnableScheduling
 public class TrackingTelegramApplication {
 
     private static final String APP_NAME = "TrackingTelegramApplication";

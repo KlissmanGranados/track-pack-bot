@@ -83,13 +83,16 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
                         }
                     }
 
-                    if(pack.isHasArrived())
-                        pack.setHasNotified(true);
+                }
+
+                boolean isAllArrived = packages.stream().allMatch( Package::isHasArrived );
+                if(isAllArrived) {
+                    packages.forEach( pack -> pack.setHasNotified(true) );
+                    packageDao.saveAll(packages);
                 }
 
                 firstDetails.append(lastDetails);
                 sendMessage(chatId, firstDetails.toString());
-                packageDao.saveAll(packages);
 
             });
 

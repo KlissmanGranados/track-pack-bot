@@ -85,7 +85,9 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
 
                 }
 
-                boolean isAllArrived = packages.stream().allMatch( Package::isHasArrived );
+                boolean isAllArrived = packages.stream()
+                        .allMatch(p -> p != null && p.isHasArrived());
+
                 if(isAllArrived) {
                     packages.forEach( pack -> pack.setHasNotified(true) );
                     packageDao.saveAll(packages);

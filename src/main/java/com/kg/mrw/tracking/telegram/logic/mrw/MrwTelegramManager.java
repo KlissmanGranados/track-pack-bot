@@ -150,6 +150,7 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
 
     private String getDetailsFromPackage(Package pack) {
         TrackingToResponseDto trackingToResponseDto = new TrackingToResponseDto();
+        trackingToResponseDto.setHasArrived(pack.getHasArrived());
         trackingToResponseDto.setTrackingCode(pack.getTrackingCode());
         trackingToResponseDto.setResponse(pack.getResponse());
         trackingToResponseDto.setProvider(pack.getProvider());

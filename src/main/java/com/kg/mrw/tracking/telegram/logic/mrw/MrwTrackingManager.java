@@ -129,14 +129,16 @@ public class MrwTrackingManager extends TrackingServiceSupport {
             }
         }
 
-        boolean hasArrived = false;
+        boolean hasArrived = trackingToResponseDto.isHasArrived();
 
-        for (JSONObject trackingEntry : trackingEntries) {
-            String estatus = trackingEntry.getString("estatus");
-            if (trackingEntry.has("agencia")) {
-                if ("Disponible en Agencia".equals(estatus)) {
-                    hasArrived = true;
-                    break;
+        if(!trackingToResponseDto.isHasArrived()) {
+            for (JSONObject trackingEntry : trackingEntries) {
+                String estatus = trackingEntry.getString("estatus");
+                if (trackingEntry.has("agencia")) {
+                    if ("Disponible en Agencia".equals(estatus)) {
+                        hasArrived = true;
+                        break;
+                    }
                 }
             }
         }

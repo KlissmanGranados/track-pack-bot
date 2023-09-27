@@ -136,12 +136,16 @@ public class MrwTelegramManager extends TelegramLongPollingBot {
 
             searchPackageHandler(message, chatId, messageId, messageTracking);
 
-        } catch (Exception e) {
-
+        }
+        catch (BotException botException) {
+            logger.error("I cant reply message: {}", botException.getMessage());
+            replyToMessage(chatId, messageId, "No se ha podido procesar la consulta \uD83D\uDE13 , : " + botException.getMessage());
+            messageTracking.setError(botException.getMessage());
+        }
+        catch (Exception e) {
             logger.error("I cant reply message: {}", e.getMessage());
+            replyToMessage(chatId, messageId, "No se ha podido procesar la consulta \uD83D\uDE13 ");
             messageTracking.setError(e.getMessage());
-            replyToMessage(chatId, messageId, "No se ha podido procesar la consulta \uD83D\uDE13");
-
         } finally {
             userTracking(userName, chatId, messageTracking);
         }
